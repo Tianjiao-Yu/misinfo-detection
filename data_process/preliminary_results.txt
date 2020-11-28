@@ -1,0 +1,34 @@
+
+
+#########Naive bayes with n-gram ###################
+Total contents classified: 2768
+Score: 0.885419600633317
+score length 5
+Confusion matrix:
+[[   8  554]
+ [   4 2202]]
+
+#########logistic regression with n-gram ###################
+Total contents classified: 2768
+Score: 0.8977749193946998
+score length 5
+Confusion matrix:
+[[  89  473]
+ [  16 2190]]
+
+ #########SVM with n-gram ###################
+Total contents classified: 2768
+Score: 0.901782926649106
+score length 5
+Confusion matrix:
+[[ 178  384]
+ [  75 2131]]
+
+
+ #########RandomForest with n-gram ###################
+Total contents classified: 2768
+Score: 0.8968643342136516
+score length 5
+Confusion matrix:
+[[ 120  442]
+ [  46 2160]]
