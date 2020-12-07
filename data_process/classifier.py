@@ -71,43 +71,44 @@ predicted_rf = random_forest.predict(DataPrep.test_news['content'].values.astype
 np.mean(predicted_rf == DataPrep.test_news['credibility'])
 
 
-#User defined functon for K-Fold cross validatoin
+
 def build_confusion_matrix(classifier):
 
-    k_fold = KFold(n_splits=5)
-    scores = []
+
+
     confusion = np.array([[0,0],[0,0]])
 
-    for train_ind, test_ind in k_fold.split(DataPrep.train_news):
-        train_text = DataPrep.train_news.iloc[train_ind]['content'].values.astype('str')
-        train_y = DataPrep.train_news.iloc[train_ind]['credibility']
 
-        test_text = DataPrep.train_news.iloc[test_ind]['content'].values.astype('str')
-        test_y = DataPrep.train_news.iloc[test_ind]['credibility']
+    train_text = DataPrep.train_news['content'].values.astype('str')
+    train_y = DataPrep.train_news['credibility']
 
-        classifier.fit(train_text,train_y)
-        predictions = classifier.predict(test_text)
+    test_text = DataPrep.test_news['content'].values.astype('str')
+    test_y = DataPrep.test_news['credibility']
 
-        confusion += confusion_matrix(test_y,predictions)
-        score = f1_score(test_y,predictions)
-        scores.append(score)
+    classifier.fit(train_text,train_y)
+    predictions = classifier.predict(test_text)
 
-    return (print('Total contents classified:', len(DataPrep.train_news)),
-    print('Score:', sum(scores)/len(scores)),
-    print('score length', len(scores)),
+    confusion = confusion_matrix(test_y,predictions)
+    score = f1_score(test_y,predictions)
+
+    precision =  confusion[1][1] / (confusion[0][1]+confusion[1][1])
+    recall =  confusion[1][1] / (confusion[1][0]+confusion[1][1])
+
+    return (print('F1 Score:', score),
     print('Confusion matrix:'),
-    print(confusion))
+    print(confusion),
+    print('Recall:', recall),
+    print('Precision:', precision))
 
-#K-fold cross validation for all classifiers
+
 # build_confusion_matrix(nb_pipeline)
 # build_confusion_matrix(logR_pipeline)
-# build_confusion_matrix(svm_pipeline)
+build_confusion_matrix(svm_pipeline)
 # build_confusion_matrix(random_forest)
 
 
-"""So far we have used bag of words technique to extract the features and passed those featuers into classifiers. We have also seen the
-f1 scores of these classifiers. now lets enhance these features using term frequency weights with various n-grams
-"""
+############ using term frequency weights with various n-grams
+
 
 
 ##Now using n-grams
@@ -161,10 +162,10 @@ mlp_ngram.fit(DataPrep.train_news['content'].values.astype('str'),DataPrep.train
 predicted_mlp_ngram = mlp_ngram.predict(DataPrep.test_news['content'].values.astype('str'))
 np.mean(mlp_ngram == DataPrep.test_news['credibility'])
 
-#K-fold cross validation for all classifiers
+
 # build_confusion_matrix(nb_pipeline_ngram)
 # build_confusion_matrix(logR_pipeline_ngram)
 # build_confusion_matrix(svm_pipeline_ngram)
 #
 # build_confusion_matrix(random_forest_ngram)
-build_confusion_matrix(mlp_ngram)
+# build_confusion_matrix(mlp_ngram)

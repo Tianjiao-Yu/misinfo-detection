@@ -8,11 +8,16 @@ from nltk.stem.porter import PorterStemmer
 from nltk.tokenize import word_tokenize
 import seaborn as sb
 import matplotlib.pyplot as plt
-test_filename = 'test.csv'
-train_filename = 'train.csv'
+from sklearn.model_selection import train_test_split
 
-train_news = pd.read_csv(train_filename)
-test_news = pd.read_csv(test_filename)
+df = pd.read_csv('dataset.csv')
+
+#
+# test_filename = 'test.csv'
+# train_filename = 'train.csv'
+# train_news = pd.read_csv(train_filename)
+# test_news = pd.read_csv(test_filename)
+train_news, test_news = train_test_split(df, test_size=0.2)
 
 def data_obs():
     print("training dataset size:")

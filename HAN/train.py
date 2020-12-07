@@ -16,12 +16,14 @@ import re
 import matplotlib.pyplot as plt
 import sys
 from sklearn.metrics import roc_auc_score
+from sklearn.metrics import confusion_matrix
 from nltk import tokenize
 import seaborn as sns
 from sklearn.utils import shuffle
 import re
 import os
 import datetime
+import tensorflow as tf
 
 my_path = os.path.abspath(os.path.dirname(__file__))
 print("my path: ",my_path)
@@ -30,7 +32,7 @@ print("my path: ",my_path)
 MAX_SEQUENCE_LENGTH = 1000
 max_features=200000
 max_senten_len=50
-max_senten_num=24
+max_senten_num=32
 embed_size=100
 VALIDATION_SPLIT = 0.2
 TEST_SPLIT = 0.2
@@ -53,6 +55,9 @@ def precision(y_true, y_pred):
 def recall(y_true, y_pred):
     true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
     possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    possible_positives = tf.cast(possible_positives, tf.float32)
+    true_positives=tf.cast(true_positives, tf.float32)
+
     recall = true_positives / (possible_positives + K.epsilon())
     return recall
 
@@ -124,9 +129,7 @@ class AttentionWithContext(Layer):
                                  constraint=self.u_constraint)
 
         super(AttentionWithContext, self).build(input_shape)
-    def compute_mask(self, input, input_mask=None):
-        # do not pass the mask to the next layers
-        return None
+
     def call(self, x, mask=None):
         uit = dot_product(x, self.W)
 
@@ -138,11 +141,6 @@ class AttentionWithContext(Layer):
 
         a = K.exp(ait)
 
-        # apply mask after the exp. will be re-normalized next
-        if mask is not None:
-            # Cast the mask to floatX to avoid float64 upcasting in theano
-            a *= K.cast(mask, K.floatx())
-
         # in some cases especially in the early stages of training the sum may be almost zero
         # and this results in NaN's. A workaround is to add a very small positive number ε to the sum.
         # a /= K.cast(K.sum(a, axis=1, keepdims=True), K.floatx())
@@ -153,30 +151,6 @@ class AttentionWithContext(Layer):
         return K.sum(weighted_input, axis=1)
     def compute_output_shape(self, input_shape):
         return input_shape[0], input_shape[-1]
-
-def get_testset_accuracy(model,test_vectors,label_arr):
-    predictions = model.predict(test_vectors[0])
-    predicted_classes = np.argmax(predictions,axis=1)
-    iterator_index = 0
-    correct_preds = 0
-    test_set_accuracy = 0
-    label_pred = [0 for label in label_arr]
-    label_total = [0 for label in label_arr]
-    for actual_vals in test_vectors[1].values:
-        if actual_vals[predicted_classes[iterator_index]] == 1:
-            correct_preds+=1
-            label_pred[predicted_classes[iterator_index]]+=1
-        label_total[predicted_classes[iterator_index]]+=1
-        iterator_index+=1
-    test_set_accuracy = float(correct_preds/iterator_index)
-    val = []
-    for i in range(0,label_arr.__len__()):
-        if label_total[i] == 0:
-            val.append([label_arr[i],label_pred[i],label_total[i],0])
-        else:
-            val.append([label_arr[i],label_pred[i],label_total[i],(label_pred[i]/label_total[i])])
-    df = pd.DataFrame(val,columns=['Label','Correct_Label_Predictions','Total_Label_Docs','Prediction_Accuracy'])
-    return test_set_accuracy,df
 
 def log(statement):
     print("+"*30)
@@ -207,7 +181,7 @@ def get_testset_accuracy(model,test_vectors,label_arr):
     df = pd.DataFrame(val,columns=['Label','Correct_Label_Predictions','Total_Label_Docs','Prediction_Accuracy'])
     return test_set_accuracy,df
 
-def generate_han_embedding_matrix(data_frame,word_index,title_bool):
+def generate_han_embedding_matrix(data_frame,word_index):
     paras = []
     #labels = []
     texts = []
@@ -256,7 +230,7 @@ def generate_han_embedding_matrix(data_frame,word_index,title_bool):
                             tokenized_body[i,j,k] = word_index[word]
                             k=k+1
                     except:
-                        print(word)
+                        print("not encoded: ",word)
                         pass
     #Datastructure from the above [i:Article_Number,j:Sentence_number,k:Word Index]
     tokenized_headlines = np.zeros((len(texts), max_senten_len), dtype='int32')
@@ -291,19 +265,9 @@ def generate_han_embedding_matrix(data_frame,word_index,title_bool):
     x_val = tokenized_body[-nb_validation_samples:]
     y_val = seperated_labels[-nb_validation_samples:]
 
-    if title_bool:
-        pre_headline_train = tokenized_headlines[:-nb_validation_samples]
-        headlines_test = pre_headline_train[-nb_test_samples:]
-        headlines_train = pre_headline_train[:-nb_test_samples]
-        headlines_val = tokenized_headlines[-nb_validation_samples:]
-        x_val = [x_val,headlines_val]
-        x_train = [x_train,headlines_train]
-        x_test = [x_test,headlines_test]
-        log("Shape Of Train Test and Validate Vectors For Headlines")
-        print(x_train[1].shape,x_test[1].shape,x_val[1].shape)
-    else:
-        log("Shape Of Train Test and Validate Vectors")
-        print(x_train.shape,x_test.shape,x_val.shape)
+
+    log("Shape Of Train Test and Validate Vectors")
+    print(x_train.shape,x_test.shape,x_val.shape)
 
     train_vectors = (x_train,y_train)
     validation_vectors = (x_val,y_val)
@@ -350,7 +314,7 @@ def generate_rnn_embedding_matrix(data_frame,word_index):
         data_frame = data_frame.sample(n=NUM_SAMPLES)
     labels = data_frame['credibility']
     text = data_frame['content']
-    print(data_frame.content.shape[0])
+    #print(data_frame.content.shape[0])
     for body_text in data_frame['content']:
         text = clean_str(body_text)
         texts.append(text)
@@ -380,11 +344,10 @@ def generate_rnn_embedding_matrix(data_frame,word_index):
     # sequences = tokenizer.texts_to_sequences(texts)
     # tokenized_body = pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH)
     #Converts Labels to Digits.
-    log('Shape of Data Tensor:')
-    log(tokenized_body.shape)
+    log('Shape of Data Tensor:'+str(tokenized_body.shape))
     seperated_labels = pd.get_dummies(labels)
-    log('Shape of Label Tensor:')
-    log(seperated_labels.shape)
+    log('Shape of Label Tensor:'+str(seperated_labels.shape))
+
     indices = np.arange(tokenized_body.shape[0])
     np.random.shuffle(indices)
     tokenized_body = tokenized_body[indices]
@@ -478,7 +441,7 @@ def train_lstm(data_frame,word_index,plot_name,LSTM_COUNT):
     l_lstm = Bidirectional(LSTM(LSTM_COUNT))(embedded_sequences)
     preds = Dense(num_labels, activation='softmax')(l_lstm)
     model = Model(sequence_input, preds)
-    model.compile(loss='categorical_crossentropy',
+    model.compile(loss='binary_crossentropy',
                 optimizer='adam',
                 metrics=['categorical_accuracy'])
     model.summary()
@@ -494,15 +457,15 @@ def train_lstm(data_frame,word_index,plot_name,LSTM_COUNT):
     label_prediction_df.to_csv(os.path.join(MODEL_FOLDER,plot_name+'_'+model_name+'_prediction_accuracy.csv'))
     log("Test Set Accuracy Distribution "+model_name+" "+plot_name)
     log(label_prediction_df)
-    log("Test Set Accuracy ")
-    log(test_set_accuracy)
+    log("Test Set Accuracy: "+str(test_set_accuracy))
+
     return history,model,test_set_accuracy
 def train_han(data_frame,word_index,plot_name,LSTM_COUNT,NEW_DROPOUT_VALUE,REGULARIZER_VALUE,REG_VAL):
     model_name = 'HAN'
     data_frame = preprocess_data(data_frame)
     log("Running HAN")
     num_labels = len(data_frame['credibility'].unique())
-    embedding_matrix,data,seperated_labels,word_index,train_vectors,validation_vectors,test_vectors = generate_han_embedding_matrix(data_frame,word_index,False)
+    embedding_matrix,data,seperated_labels,word_index,train_vectors,validation_vectors,test_vectors = generate_han_embedding_matrix(data_frame,word_index)
     embedding_layer = Embedding(len(word_index) + 1,embed_size,weights=[embedding_matrix], input_length=max_senten_len, trainable=False)
     log(seperated_labels.columns.values)
     if REGULARIZER_VALUE == 1:
@@ -526,11 +489,22 @@ def train_han(data_frame,word_index,plot_name,LSTM_COUNT,NEW_DROPOUT_VALUE,REGUL
     sent_att = Dropout(NEW_DROPOUT_VALUE)(AttentionWithContext()(sent_dense))
     preds = Dense(num_labels, activation='softmax')(sent_att)
     model = Model(sent_input, preds)
-    model.compile(loss='categorical_crossentropy',optimizer='adam',metrics=['categorical_accuracy'])
+    model.compile(loss='binary_crossentropy',optimizer='adam',metrics=['categorical_accuracy'])
     log("Training Model ")
     checkpoint_model_path =os.path.join(MODEL_FOLDER,model_name+'-checkpoint-'+plot_name+'.h5')
     checkpoint = ModelCheckpoint(checkpoint_model_path, verbose=0, monitor='val_loss',save_best_only=True, mode='auto')
     history = model.fit(train_vectors[0], train_vectors[1], validation_data=(validation_vectors[0], validation_vectors[1]), epochs=NUM_EPOCHS, batch_size=256, callbacks=[checkpoint])
+
+    #confusion = np.array([[0,0],[0,0]])
+    y_preds = model.predict(test_vectors[0])
+    #print(y_preds)
+    #confusion = confusion_matrix(test_vectors[1],y_preds)
+    p = precision(test_vectors[1],y_preds)
+    print("Precision:", p)
+    print("Recall:", recall(test_vectors[1],y_preds))
+
+    #confusion = confusion_matrix(test_vectors[1], y_preds)
+    #print('confusion_matrix!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', confusion)
     log(history.history)
     #Plot for Accurracy
     plot_figure(history,'Model Accuracy',['train','test'],['categorical_accuracy','val_categorical_accuracy'],'epoch','accuracy',model_name,plot_name)
@@ -542,6 +516,6 @@ def train_han(data_frame,word_index,plot_name,LSTM_COUNT,NEW_DROPOUT_VALUE,REGUL
     label_prediction_df.to_csv(os.path.join(MODEL_FOLDER,plot_name+'_'+model_name+'_prediction_accuracy.csv'))
     log("Test Set Accuracy Distribution "+model_name+" "+plot_name)
     log(label_prediction_df)
-    log("Test Set Accuracy ")
-    log(test_set_accuracy)
+    log("Test Set Accuracy: "+str(test_set_accuracy))
+
     return history,model,test_set_accuracy

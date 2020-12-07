@@ -31,8 +31,6 @@ def get_countVectorizer_stats():
 #get_countVectorizer_stats()
 
 
-
-
 #create tf-df frequency features
 #tf-idf
 tfidfV = TfidfTransformer()
@@ -45,8 +43,6 @@ def get_tfidf_stats():
 #get_tfidf_stats()
 
 
-
-
 #bag of words - with n-grams
 # CountVectorizer(ngram_range=(1,3),stop_words='english')
 
@@ -54,13 +50,6 @@ def get_tfidf_stats():
 
 tfidf_ngram = TfidfVectorizer(stop_words='english',ngram_range=(1,4),use_idf=True,smooth_idf=True)
 
-
-
-
-
-#helper function to strip tags from tagged corpus
-def untag(tagged_sentence):
-    return [w for w, t in tagged_sentence]
 
 #Using Word2Vec
 # with open("glove.6B.50d.txt", "rb") as lines:
@@ -71,21 +60,3 @@ def untag(tagged_sentence):
 
 #model = gensim.models.Word2Vec(X, size=100) # x be tokenized text
 #w2v = dict(zip(model.wv.index2word, model.wv.syn0))
-
-
-class MeanEmbeddingVectorizer(object):
-    def __init__(self, word2vec):
-        self.word2vec = word2vec
-        # if a text is empty we should return a vector of zeros
-        # with the same dimensionality as all the other vectors
-        self.dim = len(word2vec.itervalues().next())
-
-    def fit(self, X, y):
-        return self
-
-    def transform(self, X):
-        return np.array([
-            np.mean([self.word2vec[w] for w in words if w in self.word2vec]
-                    or [np.zeros(self.dim)], axis=0)
-            for words in X
-        ])
